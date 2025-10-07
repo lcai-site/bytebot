@@ -1,14 +1,6 @@
 name: bytebot
 
 services:
-  bytebot-ui:
-    image: ghcr.io/bytebot-ai/bytebot-ui:latest
-    restart: unless-stopped
-    env_file:
-      - .env
-    depends_on:
-      - bytebot-desktop
-
   bytebot-desktop:
     image: ghcr.io/bytebot-ai/bytebot-desktop:edge
     shm_size: "2g"
@@ -18,28 +10,37 @@ services:
     environment:
       - DISPLAY=:0
 
-  bytebot-agent:
-    image: ghcr.io/bytebot-ai/bytebot-agent:latest
+  postgres:
+    image: postgres:16-alpine
     restart: unless-stopped
-    env_file:
-      - .env
+    environment:
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_USER=postgres
+      - POSTGRES_DB=bytebotdb
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  bytebot-agent:
+    image: ghcr.io/bytebot-ai/bytebot-agent:edge
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/bytebotdb
+      - BYTEBOT_DESKTOP_BASE_URL=http://bytebot-desktop:9990
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
     depends_on:
       - postgres
 
-  postgres:
-    image: postgres:15-alpine
+  bytebot-ui:
+    image: ghcr.io/bytebot-ai/bytebot-ui:edge
     restart: unless-stopped
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
     environment:
-      - POSTGRES_DB=bytebot
-      - POSTGRES_USER=bytebot
-      - POSTGRES_PASSWORD=bytebot
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U bytebot -d bytebot"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      - NODE_ENV=production
+      - BYTEBOT_AGENT_BASE_URL=http://bytebot-agent:9991
+      - BYTEBOT_DESKTOP_VNC_URL=http://bytebot-desktop:9990/websockify
+    depends_on:
+      - bytebot-agent
 
 volumes:
-  postgres-data:
+  postgres_data:
